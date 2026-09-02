@@ -1,0 +1,5 @@
+# Dark base restored, with a periwinkle accent: red is reserved for sells and
+# puts throughout the dashboard, so it must not also mean "widget".
+[theme]
+base = "dark"
+primaryColor = "#A9C7EE"
