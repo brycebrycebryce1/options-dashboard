@@ -274,6 +274,12 @@ may already be a day ahead of New York's.
   outside US market hours; come back during them for live bids and offers.
 - *"Under a day to expiry"* — same-day options behave wildly. Prefer an expiry a
   week or more out.
+- *"Option chains are coming from Yahoo rather than CBOE on this load"* — the
+  chains normally come from CBOE, which serves the whole book in one request.
+  When CBOE cannot be reached the page falls back to Yahoo, which needs about
+  ten requests instead, so it will be slower and is the source that gets rate
+  limited. The page still works; the numbers are the same quantities from a
+  different feed.
 - *"Yahoo Finance is rate limiting this address"* — not a bug, and not something
   you did. Yahoo caps how many requests one internet address may make, and on
   Streamlit Cloud this app shares its address with every other app hosted there,

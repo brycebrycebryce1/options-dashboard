@@ -419,7 +419,7 @@ def build_snapshot(
 
     q["log_moneyness"] = np.log(q.strike / fwd)
     q["iv"] = bs.implied_vol(q.mid, fwd, q.strike, T, q.is_call, disc)
-    # Fall back to Yahoo's own IV only where our inversion has nothing to work with.
+    # Fall back to the feed's own IV only where our inversion has nothing to work with.
     fallback = (
         ~np.isfinite(q.iv) & np.isfinite(q.yahoo_iv) & (q.yahoo_iv > 0.01) & (q.yahoo_iv < 4.0)
     )
@@ -467,7 +467,7 @@ def build_snapshot(
     live = bool(use.two_sided.sum() > (~use.two_sided).sum()) if len(use) else False
     if not live and pd.notna(latest):
         warns.append(
-            f"No live market on this chain: Yahoo has blanked every bid and ask, so these "
+            f"No live market on this chain: every bid and ask has been blanked, so these "
             f"are the closing prints of the {latest:%Y-%m-%d} session. That is the normal "
             "state outside US trading hours and is the market's last word rather than a "
             "stale quote, but the strikes printed at different moments of that session, "

@@ -9,7 +9,8 @@ walks the same page top to bottom assuming no prior knowledge, and explains how
 to read each panel and how each one is commonly misread. This file is the
 technical companion.
 
-No AI, no paid data, no API keys. Yahoo Finance for prices and chains, SEC EDGAR
+No AI, no paid data, no API keys. CBOE's free delayed feed for option chains,
+Yahoo Finance for price history and rates, SEC EDGAR
 for filings, `numpy`/`scipy`/`statsmodels` for the maths, `plotly` for the charts.
 
 Everything is delayed: Yahoo quotes by roughly 15 minutes, option open interest
@@ -710,6 +711,8 @@ share and import the app's modules from the root, so they run from anywhere.
 | --- | --- |
 | `byproduct/test_options.py` | Black-76 parity and monotonicity, implied-vol round-trip over a wide grid, greeks against finite differences, forward and vol recovery from synthetic chains, density integration/martingale/lognormal-reproduction, gamma sign conventions and flip detection, expected-move identities, skew metrics, static arbitrage checks against a deliberately damaged chain, BKM moments against closed-form lognormal values, first-passage probabilities against a Monte Carlo, wing-extension continuity, earnings move-date mapping and jump recovery from a known jump, benchmark comparison, default expiry selection across daily/weekly/degenerate listings, markdown-export table integrity, closed-market chains falling back to the last session's closing prints, leaving the width a one-sided quote already carries alone, the caption telling the after-hours closing book from a live market on the exchange's clock, maturities counted on New York's date rather than the caller's |
 | `byproduct/test_vol_pairs.py` | Estimators recovering a simulated volatility from generated intraday paths, gap sensitivity, forward-looking alignment, cointegration detection, false-positive rate on independent random walks, half-life against a known AR(1) |
+| `byproduct/test_data.py` | The Yahoo request gate: pacing across concurrent workers, the backoff ladder and its reset, refusing inside a cooldown without touching the network, dropping a crumb minted from a rate-limit reply |
+| `byproduct/test_cboe.py` | CBOE symbol spelling, OCC contract parsing including dotted share classes, the unzoned print timestamp, refusals for unlisted symbols and empty books, and a payload carried end to end through `prep` in all three quote states |
 | `byproduct/test_edgar.py` | Form 4 and 13F parsing from real filing XML, transaction-code filtering, cluster detection, year-to-date un-cumulating, issuer-name normalisation, abbreviation/word-order/qualifier matching against the spelled-out name, activist tagging and roster integrity, the per-ticker manager scan, ticker-seeded CUSIP matching and the corroboration that keeps a bad lookup out, thousands scaling and the detection of filers who never left it, URL construction, frequency-stamped XBRL series merging |
 
 Every chain in `test_options.py` is synthesised from a known smile, so the tests
@@ -721,7 +724,8 @@ that it runs.
 | File | Purpose |
 | --- | --- |
 | `app.py` | Streamlit UI and charts |
-| `data.py` | Yahoo Finance retrieval — the only module that touches the network for market data |
+| `cboe.py` | CBOE's free delayed feed: the whole option book for one underlying in a single request |
+| `data.py` | Yahoo Finance retrieval — price history, the T-bill, the index series, and the fallback chains |
 | `prep.py` | Chain cleaning: forward from parity, vol inversion, greeks, quote quality |
 | `blackscholes.py` | Black-76 pricing, greeks, implied-vol inversion |
 | `rnd.py` | Breeden–Litzenberger risk-neutral density, and first-passage probabilities |

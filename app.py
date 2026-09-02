@@ -1,8 +1,9 @@
 """Options and market analytics dashboard.
 
-Delayed by roughly 15 minutes (Yahoo quotes) and by a night (option open
-interest); the Refresh button in the sidebar drops the market caches and
-re-pulls. SEC filings are cached for six hours because they change quarterly.
+Option chains come from CBOE's free delayed feed, price history and the rates
+from Yahoo, filings from SEC EDGAR. Delayed by roughly 15 minutes (quotes) and
+by a night (open interest); the Refresh button in the sidebar drops the market
+caches and re-pulls. SEC filings are cached for six hours: they change quarterly.
 
 Sections, in order down the page:
 
@@ -44,6 +45,7 @@ from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ct
 
 import benchmark
 import bkm
+import cboe
 import data
 import earnings as earn
 import edgar
@@ -158,13 +160,51 @@ def _session():
     return data.make_session()
 
 
+@st.cache_resource
+def _cboe_session():
+    return cboe.make_session()
+
+
+@st.cache_data(ttl=MARKET_TTL, show_spinner=False)
+def load_book(symbol: str) -> tuple[cboe.Book | None, str]:
+    """CBOE's whole option book for one underlying, and why not if it is absent.
+
+    One request carries every expiration, so this is fetched once per ticker and
+    sliced below, rather than asked for per expiry the way Yahoo has to be. It is
+    warmed before the parallel batch runs, deliberately: several chain tasks would
+    otherwise reach a cold cache at the same moment and each start its own download
+    of the same five megabytes.
+
+    The reason for a failure is carried back rather than raised, because a failure
+    here is not fatal -- Yahoo can still serve the chains, and every loader below
+    falls back to it. What the reader must not get is that swap happening silently,
+    so the caller says so on the page.
+    """
+    try:
+        return cboe.fetch_book(symbol, _cboe_session()), ""
+    except Exception as exc:  # noqa: BLE001 - reported, then Yahoo is asked
+        return None, why(exc)
+
+
+def _book(symbol: str) -> cboe.Book | None:
+    return load_book(symbol)[0]
+
+
 @st.cache_data(ttl=MARKET_TTL, show_spinner=False)
 def load_expirations(symbol: str) -> list[str]:
+    book = _book(symbol)
+    if book is not None:
+        return book.expirations
     return data.fetch_expirations(symbol, _session())
 
 
 @st.cache_data(ttl=MARKET_TTL, show_spinner=False)
 def load_spot(symbol: str) -> float:
+    # Taken from the same payload as the chains when there is one, so the spot and
+    # the strikes are read at one instant rather than a few seconds apart.
+    book = _book(symbol)
+    if book is not None:
+        return book.spot
     return data.fetch_spot(symbol, _session())
 
 
@@ -186,6 +226,9 @@ def load_rate() -> tuple[float, str]:
 
 @st.cache_data(ttl=MARKET_TTL, show_spinner=False)
 def load_chain(symbol: str, expiration: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    book = _book(symbol)
+    if book is not None:
+        return book.chain(expiration)
     return data.fetch_raw_chain(symbol, expiration, _session())
 
 
@@ -255,8 +298,8 @@ def load_manager_13f(cik: str) -> list:
 
 
 MARKET_CACHES = (
-    load_expirations, load_spot, load_rate, load_chain, load_history, load_closes, load_insiders,
-    run_screen,
+    load_book, load_expirations, load_spot, load_rate, load_chain, load_history, load_closes,
+    load_insiders, run_screen,
 )
 
 # How many downloads may be in flight at once. Everything this app fetches is
@@ -378,11 +421,29 @@ if not symbol:
     st.stop()
 
 try:
+    # Warmed here, on one thread, before anything else asks for it. Both calls below
+    # read it, and so does every chain task in the parallel batch further down;
+    # letting those race for a cold cache would start the same download several
+    # times over.
+    _, chain_source_note = load_book(symbol)
     expirations = load_expirations(symbol)
     spot = load_spot(symbol)
 except Exception as exc:  # noqa: BLE001 - surface any data problem to the user
     st.error(f"Could not load data for **{symbol}**: {why(exc)}")
     st.stop()
+
+if chain_source_note:
+    # The fallback is meant to be invisible in the sense that the page still works,
+    # not in the sense that nobody is told. Which feed priced the smile belongs on
+    # the page beside everything else this dashboard says about where its numbers
+    # came from.
+    st.warning(
+        f"Option chains are coming from Yahoo rather than CBOE on this load: "
+        f"{chain_source_note} Yahoo answers one expiration per request and rate "
+        "limits by address, so the page may be slower here and may fail outright "
+        "on the hosted copy.",
+        icon="⚠️",
+    )
 
 auto_rate, rate_source = load_rate()
 
@@ -456,9 +517,11 @@ pdf_slot = st.sidebar.empty()
 md_slot = st.sidebar.empty()
 
 st.sidebar.caption(
-    "During US trading hours quotes are delayed ~15 minutes. After the close Yahoo "
-    "keeps serving the closing bids and offers for some hours, then blanks them "
-    "overnight, and the page falls back to each strike's closing print. The line "
+    "Option chains come from CBOE's free delayed feed; price history, the T-bill and "
+    "the index series come from Yahoo. During US trading hours quotes are delayed ~15 "
+    "minutes. After the close the closing bids and offers keep being served for some "
+    "hours, then are blanked overnight, and the page falls back to each strike's "
+    "closing print. The line "
     "under the title says which of the three it is showing. Open interest settles "
     "overnight; SEC filings and earnings dates are cached for six hours."
 )
@@ -487,8 +550,13 @@ if symbol != benchmark.BENCHMARK_SYMBOL:
     # The index comparison needs the same two lookups for SPY. Its own chain
     # still waits, because which expiry to ask for is not known until the
     # primary one is.
-    _tasks["bench_expiries"] = lambda: load_expirations(benchmark.BENCHMARK_SYMBOL)
-    _tasks["bench_spot"] = lambda: load_spot(benchmark.BENCHMARK_SYMBOL)
+    # One task rather than two: both of these read the same CBOE book, and as
+    # separate tasks they reached a cold cache together and each fetched it.
+    _tasks["bench"] = lambda: (
+        load_book(benchmark.BENCHMARK_SYMBOL),
+        load_expirations(benchmark.BENCHMARK_SYMBOL),
+        load_spot(benchmark.BENCHMARK_SYMBOL),
+    )
 _tasks["fundamentals"] = lambda: load_fundamentals(symbol)
 _tasks["cusip"] = lambda: load_cusip(symbol)
 for _name, _cik in edgar.KNOWN_MANAGERS.items():
@@ -966,8 +1034,9 @@ REPORT.text(GEX_BLURB)
 oi_available = gex.has_open_interest(surface_snaps)
 if not oi_available:
     oi_warning = (
-        "Yahoo is reporting zero open interest across these chains right now. It blanks "
-        "that column for stretches at a time, particularly outside US market hours — hit "
+        "The feed is reporting zero open interest across these chains right now. That "
+        "column is blanked for stretches at a time, particularly outside US market "
+        "hours — hit "
         "Refresh later, or fall back to volume. Volume answers a different question: "
         "where gamma was traded today, not where the position sits."
     )
