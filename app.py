@@ -217,9 +217,18 @@ def load_company(symbol: str) -> tuple[str, str]:
 
 @st.cache_data(ttl=FILING_TTL, show_spinner=False)
 def load_cusip(symbol: str) -> str | None:
-    """The ticker's CUSIP, used only to corroborate 13F holdings. None is fine."""
+    """The ticker's CUSIP, used only to corroborate 13F holdings. None is fine.
+
+    The shared session is passed here for the same reason as everywhere else,
+    and it matters more here than the others. yfinance keeps one process-wide
+    object holding the cookie and the crumb Yahoo issues together, and handing
+    it a session swaps that cookie jar out while leaving the crumb behind. This
+    lookup runs in the same batch as a dozen chain downloads, so omitting the
+    session invalidated the pair mid-burst and forced a re-mint -- an extra
+    round trip against the one endpoint most likely to be rate limited.
+    """
     try:
-        return data.fetch_cusip(symbol)
+        return data.fetch_cusip(symbol, _session())
     except Exception:  # noqa: BLE001 - purely an enrichment; never fail the page
         return None
 
@@ -252,12 +261,14 @@ MARKET_CACHES = (
 
 # How many downloads may be in flight at once. Everything this app fetches is
 # I/O, so the wall clock was almost entirely time spent waiting on one reply
-# before asking for the next. Four is deliberately modest: the SEC side is held
-# to its published rate by a lock in edgar regardless of how many workers there
-# are, and Yahoo has no published limit but does throttle, so the pool is sized
-# to overlap latency rather than to extract the most throughput available.
-# Six rather than four because the batch mixes both: an SEC task parked on the
-# rate lock would otherwise hold a worker that a Yahoo download could be using.
+# before asking for the next. The pool no longer sets the rate either side sees:
+# edgar holds the SEC to its published limit with a lock, and data now paces
+# Yahoo the same way, so both are governed by an interval between request starts
+# rather than by this number. What it still buys is overlap -- a task parked on
+# one of those locks would otherwise hold a worker the other could be using.
+# Twenty 13F managers are queued in the same batch, which is what makes it worth
+# having at all; the twelve Yahoo requests beside them measured about three
+# seconds in total whether they ran together or one at a time.
 FETCH_WORKERS = 6
 
 

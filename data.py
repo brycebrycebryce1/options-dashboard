@@ -12,6 +12,7 @@ everywhere.
 
 from __future__ import annotations
 
+import threading
 import time
 
 import pandas as pd
@@ -40,21 +41,96 @@ def make_session():
     return session
 
 
+# Yahoo publishes no rate limit, but it does enforce one per source IP, and a
+# shared host is the case that matters: on Streamlit Community Cloud this app's
+# requests leave from an address it shares with every other app on that pool,
+# most of a page load's budget having already been spent by strangers. So the
+# rate is paced here rather than being left to the size of the thread pool. The
+# lock is held across the sleep on purpose, exactly as the SEC one in edgar is:
+# that spaces request *starts* for the process as a whole, which lets several
+# workers overlap the latency of their replies without ever raising the rate
+# Yahoo sees. A cold page load is about sixteen requests, so the interval below
+# costs a few seconds and holds the peak to four a second.
+YAHOO_INTERVAL = 0.25
+
+# How long to stop asking after Yahoo has said no. Refreshing the page re-runs
+# the script, and a failed load caches nothing, so every refresh used to fire
+# the whole burst again -- which keeps the limiter's window saturated and makes
+# the block outlast itself. Failing fast for a minute is what actually clears it.
+COOLDOWN = 60.0
+
+_pace_lock = threading.Lock()
+_last_request = 0.0
+_blocked_until = 0.0
+
+
+def _pace() -> None:
+    """Block until this thread may start another Yahoo request."""
+    global _last_request
+    with _pace_lock:
+        wait = YAHOO_INTERVAL - (time.monotonic() - _last_request)
+        if wait > 0:
+            time.sleep(wait)
+        _last_request = time.monotonic()
+
+
+def _cooldown_remaining() -> float:
+    return max(0.0, _blocked_until - time.monotonic())
+
+
+def _begin_cooldown() -> None:
+    global _blocked_until
+    _blocked_until = time.monotonic() + COOLDOWN
+
+
+def _rate_limited(seconds: float) -> RuntimeError:
+    return RuntimeError(
+        f"Yahoo Finance is rate limiting this address. Waiting {seconds:.0f}s before "
+        "asking again -- refreshing sooner only restarts its clock. On Streamlit "
+        "Cloud the address is shared with other apps, so this can happen even on "
+        "the first load of the day."
+    )
+
+
+def _drop_stale_crumb() -> None:
+    """Forget the crumb yfinance minted, so the next attempt asks for a new one.
+
+    yfinance 1.5.1 assigns the response body to its cached crumb *before* it
+    checks the status code, so a 429 leaves the literal text "Too Many Requests"
+    sitting there as the crumb. It reuses that on the next call without going
+    near the network, and only re-mints once the bad crumb has cost another
+    rejected request. Clearing it here means a retry actually retries.
+    """
+    try:
+        from yfinance.data import SingletonMeta, YfData
+
+        instance = SingletonMeta._instances.get(YfData)
+        if instance is not None:
+            instance._crumb = None
+    except Exception:  # noqa: BLE001 - a private detail of a pinned version
+        pass
+
+
 def _retry(fn, attempts: int = 4, base_delay: float = 1.5):
-    """Retry ``fn`` through Yahoo's rate limiter with exponential backoff."""
+    """Run ``fn`` against Yahoo, paced, with backoff through its rate limiter."""
     from yfinance.exceptions import YFRateLimitError
+
+    remaining = _cooldown_remaining()
+    if remaining > 0:
+        raise _rate_limited(remaining)
 
     last: Exception | None = None
     for i in range(attempts):
+        _pace()
         try:
             return fn()
         except YFRateLimitError as exc:
             last = exc
+            _drop_stale_crumb()
             if i < attempts - 1:
                 time.sleep(base_delay * (2**i))
-    raise RuntimeError(
-        "Yahoo Finance is rate limiting this machine. Wait a minute and hit Refresh."
-    ) from last
+    _begin_cooldown()
+    raise _rate_limited(COOLDOWN) from last
 
 
 def get_ticker(symbol: str, session=None):
@@ -110,6 +186,7 @@ def fetch_cusip(symbol: str, session=None) -> str | None:
     """
     ticker = get_ticker(symbol, session)
     try:
+        _pace()
         isin = ticker.isin
     except Exception:  # noqa: BLE001 - a missing ISIN must not fail the page
         return None

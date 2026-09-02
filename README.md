@@ -40,10 +40,26 @@ panels' data are independent requests that used to run one after another, which
 on a name with eight expirations was most of the page's load time spent waiting
 on a reply before asking for the next. They now go out together on a small pool
 (`app.FETCH_WORKERS`), which took a cold load from about 66 seconds to about 32,
-and a second ticker inside the cache window to about 10. The SEC side is
-unaffected by the pool size: `edgar._throttle` holds a process-wide lock so the
-request *rate* stays under the SEC's published limit no matter how many workers
-are asking.
+and a second ticker inside the cache window to about 10.
+
+Neither side's *rate* is set by the pool size. `edgar._throttle` holds a
+process-wide lock so the SEC sees no more than its published limit however many
+workers are asking, and `data._pace` does the same for Yahoo at
+`data.YAHOO_INTERVAL`. Yahoo publishes no limit but enforces one per source
+address, and a shared address is the case that matters: on Streamlit Community
+Cloud the requests leave from a pool shared with every other app on it, so much
+of the budget can be gone before this one asks for anything. A page load is
+about sixteen Yahoo requests; paced, they measure about three seconds in total,
+so serialising them costs nothing worth having.
+
+When Yahoo does refuse, `data` stops asking for `data.COOLDOWN` seconds and
+every call fails immediately with the wait in the message. That is deliberate
+and it is the part that actually clears a block. A failed load caches nothing,
+so reloading the page re-runs the script and fires the whole burst again --
+which keeps the limiter's window saturated and makes the block outlast itself.
+The symptom is a page that says `Yahoo Finance is rate limiting this address`
+and keeps saying it however often it is refreshed; the fix is to leave it alone
+for a minute.
 
 ## Run
 
