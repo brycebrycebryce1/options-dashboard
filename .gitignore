@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+
+# Tests, tooling and anything else the deployed app does not need. Delete this
+# line to commit them as well.
+byproduct/
+
+# Local editor / agent tooling, not part of the app.
+.claude/
+
+# Generated exports.
+*_dashboard_*.pdf
+*_dashboard_*.md
+
+.venv/
+venv/
+.env

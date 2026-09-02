@@ -1,7 +1,12 @@
 # Exact versions, so a Streamlit Cloud rebuild installs the same code that was
 # tested here rather than whatever is newest on the day it builds. Verified
-# together on Python 3.13 (2026-09-02); choose 3.13 in the Cloud app's advanced
-# settings, since these wheels are what that interpreter resolves to.
+# together on Python 3.13 (2026-09-02).
+#
+# Every pin here has a prebuilt Linux wheel for both 3.13 and 3.14, so the build
+# does not depend on which interpreter Cloud hands out. That is why numpy is on
+# 2.3.5 rather than something older: pandas 3.0.3 requires numpy>=2.3.3 on 3.14,
+# and numpy 2.2.x has no 3.14 wheel at all, so an older pin makes Cloud compile
+# numpy from source and hang. Check wheel coverage before lowering any of these.
 #
 # This freezes our side only. Yahoo and the SEC are outside it: when Yahoo
 # changes its option endpoint the fix is a newer yfinance, so bump that line
@@ -11,7 +16,7 @@ streamlit==1.62.0
 plotly==7.0.0
 yfinance==1.5.1
 pandas==3.0.3
-numpy==2.2.2
+numpy==2.3.5
 scipy==1.18.1
 statsmodels==0.15.0
 requests==2.34.2

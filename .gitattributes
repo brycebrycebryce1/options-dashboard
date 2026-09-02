@@ -1,0 +1,4 @@
+# Normalise line endings in the repository so a checkout on Linux (Streamlit
+# Cloud) and one on Windows produce identical files, and a diff never turns
+# into every line of a file changing.
+* text=auto eol=lf
