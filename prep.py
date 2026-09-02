@@ -126,12 +126,25 @@ class ExpirySnapshot:
 
     @property
     def atm_iv(self) -> float:
-        """Vol at the forward, interpolated across the usable quotes."""
+        """Vol at the forward, interpolated across the usable quotes.
+
+        The call and the put at one strike share a log-moneyness, so the grid
+        arrives with tied abscissae -- on a liquid chain about half the rows are
+        tied. ``np.interp`` resolves a tie by whichever row happens to sort
+        first, which made this number move with row order rather than with the
+        market: on NVDA's 2026-09-18 chain the same quotes gave 33.31%, 33.13%
+        or 32.95% depending only on that. Put-call parity says the two sides
+        agree at the same strike, so the disagreement is quote noise. Average it
+        away first, and the answer is the same whatever order the rows came in.
+        """
         use = self.quotes[self.quotes.usable]
         if len(use) < 2:
             return float("nan")
-        use = use.sort_values("log_moneyness")
-        return float(np.interp(0.0, use.log_moneyness, use.iv))
+        mid = use.groupby("log_moneyness", as_index=False).iv.mean()
+        if len(mid) < 2:
+            return float("nan")
+        mid = mid.sort_values("log_moneyness")
+        return float(np.interp(0.0, mid.log_moneyness, mid.iv))
 
     def otm(self) -> pd.DataFrame:
         """Out-of-the-money quotes only: puts below the forward, calls above.

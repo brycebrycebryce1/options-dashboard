@@ -830,11 +830,14 @@ if dens is not None:
         compare = bkm.compare(mom_quotes, mom_density)
 
         mfiv_note = (
-            f"Model-free implied vol is **{mom_quotes.mfiv * 100:.2f}%** against an ATM vol of "
-            f"{dens.atm_iv * 100:.2f}%. That is the fair strike of a variance swap — the "
-            "quantity the VIX approximates — so it is the number to compare against the VIX "
-            "line further down. It sits above ATM whenever the smile has curvature, because "
-            "it prices every strike rather than just the one at the money."
+            f"Model-free implied vol is **{mom_quotes.mfiv * 100:.2f}%** against the fitted "
+            f"smile's ATM vol of {dens.atm_iv * 100:.2f}%. That second figure is the smoothed "
+            "curve read at the forward, not the raw interpolation quoted at the top of the "
+            "page, so the two differ by whatever the smoothing took out. Model-free vol is the "
+            "fair strike of a variance swap — the quantity the VIX approximates — so it is the "
+            "number to compare against the VIX line further down. It sits above ATM whenever "
+            "the smile has curvature, because it prices every strike rather than just the one "
+            "at the money."
         )
 
         st.markdown("**Cross-check: the same moments, replicated from the quotes**")

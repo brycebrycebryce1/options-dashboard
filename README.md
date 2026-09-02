@@ -305,6 +305,13 @@ The one genuinely new number is **model-free implied vol**, `√(−2·E[ln(S/F)
 compare against the VIX line in section 5, and it sits above ATM vol whenever the
 smile has curvature because it prices every strike rather than just one.
 
+The ATM vol it is quoted against there is the *fitted* one -- the smoothing
+spline read at the forward -- and not the headline figure at the top of the
+page, which interpolates the raw quotes. The two differ by whatever the
+smoothing removed, which is fractions of a point on a liquid chain and several
+points on something like GME. The page says which is which; the gap is the
+smoothing, not a disagreement about the market.
+
 ### 3. Gamma exposure
 
 Dollar gamma per 1% move in spot, signed positive for calls and negative for puts:
