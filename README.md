@@ -52,14 +52,22 @@ of the budget can be gone before this one asks for anything. A page load is
 about sixteen Yahoo requests; paced, they measure about three seconds in total,
 so serialising them costs nothing worth having.
 
-When Yahoo does refuse, `data` stops asking for `data.COOLDOWN` seconds and
-every call fails immediately with the wait in the message. That is deliberate
-and it is the part that actually clears a block. A failed load caches nothing,
-so reloading the page re-runs the script and fires the whole burst again --
-which keeps the limiter's window saturated and makes the block outlast itself.
-The symptom is a page that says `Yahoo Finance is rate limiting this address`
-and keeps saying it however often it is refreshed; the fix is to leave it alone
-for a minute.
+When Yahoo does refuse, `data` stops asking and every call fails immediately
+with the wait in the message. That is deliberate and it is the part that
+actually clears a block. A failed load caches nothing, so reloading the page
+re-runs the script and fires the whole burst again -- which keeps the limiter's
+window saturated and makes the block outlast itself. The pause walks up
+`data.COOLDOWN_LADDER` (a minute, five, fifteen, thirty) each time Yahoo refuses
+again, and any successful reply resets it. One flat minute was tried first and
+was too short: a block against a datacentre address outlasts it, so the app came
+back every minute, was refused again, and the page looked frozen on one
+sentence.
+
+Rebooting the app does not help and the message says so. The refusal is
+remembered at Yahoo's end against the address; nothing about it is held in this
+process, so restarting only means the next attempt happens sooner than it
+should. This is the one failure mode that appears on the hosted copy and never
+locally, because locally the address is yours alone.
 
 ## Run
 

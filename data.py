@@ -53,15 +53,20 @@ def make_session():
 # costs a few seconds and holds the peak to four a second.
 YAHOO_INTERVAL = 0.25
 
-# How long to stop asking after Yahoo has said no. Refreshing the page re-runs
-# the script, and a failed load caches nothing, so every refresh used to fire
-# the whole burst again -- which keeps the limiter's window saturated and makes
-# the block outlast itself. Failing fast for a minute is what actually clears it.
-COOLDOWN = 60.0
+# How long to stop asking after Yahoo has said no, lengthening each time it says
+# it again. Refreshing the page re-runs the script, and a failed load caches
+# nothing, so every refresh fires the whole burst again -- which keeps the
+# limiter's window saturated and makes the block outlast itself. One minute was
+# the first guess and it was too short: a block on a datacentre address outlasts
+# it, so the app came back every minute, was refused again, and looked to the
+# reader like a page frozen on the same sentence. The ladder backs off to half
+# an hour; any success anywhere resets it to the beginning.
+COOLDOWN_LADDER = (60.0, 300.0, 900.0, 1800.0)
 
 _pace_lock = threading.Lock()
 _last_request = 0.0
 _blocked_until = 0.0
+_refusals = 0  # consecutive times Yahoo has refused a whole retry ladder
 
 
 def _pace() -> None:
@@ -78,17 +83,52 @@ def _cooldown_remaining() -> float:
     return max(0.0, _blocked_until - time.monotonic())
 
 
-def _begin_cooldown() -> None:
-    global _blocked_until
-    _blocked_until = time.monotonic() + COOLDOWN
+def _begin_cooldown() -> float:
+    """Start the next step of the backoff, and say how long it is."""
+    global _blocked_until, _refusals
+    _refusals += 1
+    wait = COOLDOWN_LADDER[min(_refusals, len(COOLDOWN_LADDER)) - 1]
+    _blocked_until = time.monotonic() + wait
+    return wait
 
 
-def _rate_limited(seconds: float) -> RuntimeError:
+def _clear_cooldown() -> None:
+    """A reply came back, so the address is not blocked. Start the ladder over."""
+    global _blocked_until, _refusals
+    _refusals = 0
+    _blocked_until = 0.0
+
+
+def _spell(seconds: float) -> str:
+    if seconds < 90:
+        return f"{seconds:.0f} seconds"
+    return f"{seconds / 60:.0f} minutes"
+
+
+# The two situations below look identical to a reader and are not the same
+# thing, which the first version of this message got wrong: it reported the
+# full cooldown either way, so a restarted process always said "60s" and the
+# page looked frozen on one sentence. Saying which of the two it is also
+# answers the question the reader asks next, because rebooting the app is the
+# obvious thing to try and it cannot work -- the refusal is Yahoo's, and it
+# is remembered at their end against the address, not at ours.
+def _refused_now(attempts: int, wait: float) -> RuntimeError:
     return RuntimeError(
-        f"Yahoo Finance is rate limiting this address. Waiting {seconds:.0f}s before "
-        "asking again -- refreshing sooner only restarts its clock. On Streamlit "
-        "Cloud the address is shared with other apps, so this can happen even on "
-        "the first load of the day."
+        f"Yahoo Finance refused {attempts} requests in a row from this address just "
+        f"now, so the page has nothing to draw. Not asking again for {_spell(wait)}. "
+        "Rebooting the app will not help: the refusal is recorded at Yahoo's end "
+        "against the address, not held here. On Streamlit Cloud that address is "
+        "shared with every other app on the pool, so the limit can already be spent "
+        "before this app asks for anything."
+    )
+
+
+def _still_blocked(remaining: float) -> RuntimeError:
+    return RuntimeError(
+        f"Yahoo Finance refused this address a moment ago. Waiting {_spell(remaining)} "
+        "more before trying again -- asking sooner only restarts its clock. Reload the "
+        "page after that; a reboot does not shorten it, because the refusal is "
+        "remembered at Yahoo's end rather than here."
     )
 
 
@@ -117,20 +157,22 @@ def _retry(fn, attempts: int = 4, base_delay: float = 1.5):
 
     remaining = _cooldown_remaining()
     if remaining > 0:
-        raise _rate_limited(remaining)
+        raise _still_blocked(remaining)
 
     last: Exception | None = None
     for i in range(attempts):
         _pace()
         try:
-            return fn()
+            result = fn()
         except YFRateLimitError as exc:
             last = exc
             _drop_stale_crumb()
             if i < attempts - 1:
                 time.sleep(base_delay * (2**i))
-    _begin_cooldown()
-    raise _rate_limited(COOLDOWN) from last
+        else:
+            _clear_cooldown()
+            return result
+    raise _refused_now(attempts, _begin_cooldown()) from last
 
 
 def get_ticker(symbol: str, session=None):

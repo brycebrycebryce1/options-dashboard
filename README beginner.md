@@ -280,10 +280,14 @@ may already be a day ahead of New York's.
   so the cap can already be used up by strangers. **Do not keep refreshing**:
   the page has to ask Yahoo about sixteen things to draw itself, so every
   refresh spends another sixteen requests on a limit that is already full and
-  pushes the reset further away. The page now refuses to ask for a minute after
-  a refusal and tells you how long is left. Wait it out, then refresh once. If
-  it happens repeatedly, it is the hosted copy's shared address; running the app
-  on your own machine uses your own.
+  pushes the reset further away. The page now refuses to ask for a while after a
+  refusal and tells you how long is left, waiting longer each time it is refused
+  again. Wait it out, then reload once.
+  **Rebooting the app does not help.** That is the natural thing to try and it
+  cannot work: the refusal is written down at Yahoo's end, against the address,
+  not inside the app. Restarting only makes it ask again too early. If it keeps
+  happening, it is the hosted copy's shared address; running the app on your own
+  machine uses your own and this does not come up.
 
 ---
 
