@@ -56,9 +56,10 @@ The spot is held at that close until 09:45 rather than 09:30, because the feed's
 fifteen-minute delay means the chain is still the previous session's book for the
 first quarter-hour while CBOE's underlying price has been moving with the
 pre-market since dawn. Watched across the open on 2026-09-03, that constant
-landed on the minute: SPY's 2026-09-08 chain was still two-sided at 09:39:21,
-blank at 09:41:26 and 09:43:54, and serving a live book again at 09:45:58. Those
-four blank minutes are the one time of day a CBOE page shows `closing prints`,
+landed on the minute: SPY's 2026-09-08 chain had zero bids and zero asks at
+09:41:26 and again at 09:43:54, and was serving a live book at 09:45:58, with
+AVGO run by hand showing prints at 09:44 and live quotes at 09:45. Those blank
+minutes are the one time of day a CBOE page shows `closing prints`,
 and it is a coherent state rather than a broken one -- prints, open interest and
 spot all from the previous session -- but it looks nothing like the page either
 side of it, so it is worth recognising.
