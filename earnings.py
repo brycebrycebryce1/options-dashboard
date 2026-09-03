@@ -47,7 +47,7 @@ from datetime import date, datetime, timedelta
 import numpy as np
 import pandas as pd
 
-from prep import ExpirySnapshot, exchange_clock
+from prep import QUOTES_LIVE_FROM, ExpirySnapshot, exchange_clock
 
 # Announcements land either side of the session, essentially never mid-session.
 # A stamp at or after this hour is read as "after today's close", which puts the
@@ -99,10 +99,26 @@ def to_event(stamp: pd.Timestamp) -> Event:
 
 
 def next_event(stamps: list[pd.Timestamp], now: datetime | None = None) -> Event | None:
-    """The soonest announcement whose move has not already happened."""
-    today = exchange_clock(now).date()
-    events = [to_event(s) for s in stamps]
-    future = [e for e in events if e.move_date >= today]
+    """The soonest announcement whose move the chain on screen has not yet seen.
+
+    The move date itself is the awkward one. Testing ``move_date >= today`` kept
+    an announcement pending for the whole of the session it had already moved,
+    which is not a cosmetic error: the picker reads this to choose the primary
+    expiry, so a stock that reported last night spent the next day anchored to
+    whichever weekly captured the jump instead of to its monthly, and the page
+    warned about an event that was hours in the past.
+
+    The moment it flips is the feed's, not the exchange's. The jump lands at the
+    open, but until the delayed quotes catch up at 09:45 the chain being plotted
+    is still the previous close's, and that chain genuinely does still price the
+    event. Calling it past any earlier would move the primary off the only
+    expiry that knows about it.
+    """
+    clock = exchange_clock(now)
+    today = clock.date()
+    seen = (clock.hour, clock.minute) >= QUOTES_LIVE_FROM
+    future = [e for e in (to_event(s) for s in stamps)
+              if e.move_date > today or (e.move_date == today and not seen)]
     return min(future, key=lambda e: e.move_date) if future else None
 
 
