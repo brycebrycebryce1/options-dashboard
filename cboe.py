@@ -89,6 +89,13 @@ class Book:
     symbol: str
     spot: float
     contracts: pd.DataFrame  # COLUMNS, plus expiry and is_call
+    # The last completed session's close. The payload is not internally
+    # consistent before the open: around 05:00 ET it refreshes the overnight
+    # open interest and lets ``spot`` start moving with the pre-market, while
+    # every option bid and ask stays where it was at the close. A caller
+    # pricing those quotes wants the spot they were struck at, not the one the
+    # underlying has moved to since.
+    prev_close: float = float("nan")
 
     @property
     def expirations(self) -> list[str]:
@@ -160,6 +167,11 @@ def fetch_book(symbol: str, session=None) -> Book:
     spot = pd.to_numeric(pd.Series([data.get("current_price")]), errors="coerce").iloc[0]
     if not pd.notna(spot) or spot <= 0:
         raise CboeError(f"CBOE quoted no price for '{symbol.upper()}'.")
+    # Missing or nonsense is left as NaN rather than guessed at, and the caller
+    # falls back to the live price -- which is the behaviour this replaced.
+    close = pd.to_numeric(pd.Series([data.get("close")]), errors="coerce").iloc[0]
+    close = float(close) if pd.notna(close) and close > 0 else float("nan")
 
     keep = COLUMNS + ["expiry", "is_call"]
-    return Book(symbol.strip().upper(), float(spot), frame.reindex(columns=keep))
+    return Book(symbol.strip().upper(), float(spot),
+                frame.reindex(columns=keep), close)

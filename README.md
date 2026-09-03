@@ -16,16 +16,44 @@ for filings, `numpy`/`scipy`/`statsmodels` for the maths, `plotly` for the chart
 Everything is delayed: Yahoo quotes by roughly 15 minutes, option open interest
 by a session, 13F holdings by up to 45 days.
 
-Once US markets shut the quotes stop moving, but they do not vanish at once. For
-some hours after the close Yahoo keeps serving the closing bids and offers, and
-the page shows them as `closing quotes of the <date> session`: the last book of
-the day, still two-sided, and as precise as a live one. Overnight Yahoo then
-starts withholding them -- it returns a bid and ask of exactly zero on every
-strike of every chain -- and the only price left is each contract's last trade,
-which for the strikes that traded that day *is* the closing quote. The page falls
-back to those, using the date on each print to keep the session's closing trades
-and discard the ones left over from months ago, and shows `closing prints from
-<date>`. During the session itself the line reads `live quotes, delayed ~15 min`.
+Once US markets shut the quotes stop moving, but they do not vanish, and what is
+left depends on which feed answered. CBOE keeps serving the closing bids and
+offers right through to the next open. Yahoo withholds them some hours after the
+close -- a bid and ask of exactly zero on every strike of every chain -- leaving
+each contract's last trade, which for the strikes that traded that day *is* the
+closing quote; the page keeps those, using the date on each print to discard the
+ones left over from months ago.
+
+So the line under the title names the feed as well as the state, because the two
+are not interchangeable once the market shuts:
+
+| | CBOE | yfinance |
+| --- | --- | --- |
+| in the session | `live quotes from CBOE, delayed ~15 min` | `live quotes from yfinance, delayed ~15 min` |
+| close to ~05:00 ET | `closing quotes from CBOE for the <date> session, OI not yet updated` | `closing quotes from yfinance for the <date> session, OI not yet updated` |
+| ~05:00 ET to 09:45 | `closing quotes from CBOE for the <date> session, OI updated` | *(Yahoo has blanked long before)* |
+| book blanked | `closing prints from CBOE for the <date> session, no OI reported` | `closing prints from yfinance for the <date> session, no OI reported` |
+
+Nothing pins a state to a feed: the row a page lands on is decided by the data
+and the clock, so the day CBOE blanks its book the page will say so rather than
+insist it cannot happen.
+
+The clause at the end is the age of the sizes. Open interest is a session behind
+wherever it comes from, because the clearing house tallies it overnight: during a
+session the sizes on screen are the previous close's. That run reaches the feed
+around 05:00 ET, and from then until the open the quotes and the open interest
+describe the same instant -- the last close -- which is the only time of day the
+two inputs to gamma exposure are not a session apart. It is measured rather than
+assumed. Whether any open interest is being served at all is read off the chain,
+since Yahoo zeroes the column outright and gamma built on that would silently
+come out at zero; whether the run has landed is read off the clock against the
+quotes' own session, so a Friday close stays caught up across the weekend instead
+of lapsing at each midnight.
+
+The spot is held at that close until 09:45 rather than 09:30, because the feed's
+fifteen-minute delay means the chain is still the previous session's book for the
+first quarter-hour while CBOE's underlying price has been moving with the
+pre-market since dawn.
 Which of the three it is appears under the title, and the session test behind
 it, the page timestamps and every days-to-expiry figure are all on the exchange's
 clock rather than the server's or the reader's -- run from Singapore, a local
@@ -352,8 +380,10 @@ amplifies them.
 
 **The sign is an assumption, not a measurement.** Open interest is unsigned, so
 this uses the standard convention that dealers are long call gamma and short put
-gamma. Where customers overwrite calls or buy puts for protection, the true sign
-is the opposite and every conclusion inverts.
+gamma — the customer side of that is overwriting calls and buying puts for
+protection. Where the flow runs the other way, customers buying calls outright or
+selling puts for premium, the true sign is the opposite and every conclusion
+inverts.
 
 Yahoo blanks the open-interest column for stretches at a time, especially outside
 US market hours. When that happens the panel says so and offers volume as a

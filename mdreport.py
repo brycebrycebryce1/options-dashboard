@@ -187,9 +187,9 @@ def to_markdown(report) -> str:
         "written out as the numbers behind them; long series are thinned to evenly "
         "spaced samples. Quotes are delayed roughly 15 minutes during US trading "
         "hours; outside them they are the last session's closing book, or its "
-        "closing prints once Yahoo blanks that book overnight -- the line above "
-        "says which. Open interest settles by a session, and SEC holdings by up "
-        "to 45 days.",
+        "closing prints if the feed blanks that book overnight -- the line above "
+        "says which. Open interest is always a session behind and refreshes "
+        "around 05:00 ET, and SEC holdings lag by up to 45 days.",
         "",
     ]
 

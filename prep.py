@@ -29,6 +29,11 @@ import pandas as pd
 import blackscholes as bs
 from data import EXCHANGE_TZ
 
+# How the feeds are named in the line under the title. They are not
+# interchangeable overnight, so the reader is told which one is talking.
+SOURCE_CBOE = "CBOE"
+SOURCE_YAHOO = "yfinance"
+
 # A quote must be positive and not absurdly wide to be trusted.
 MAX_RELATIVE_SPREAD = 1.5
 MIN_PRICE = 0.01
@@ -89,29 +94,60 @@ class ExpirySnapshot:
     forward_method: str = "parity regression"
     warnings: tuple[str, ...] = field(default_factory=tuple)
     # Whether the chain had a two-sided market, the session its prices came
-    # from, and whether the regular session was open when it was read. The page
-    # reads all three to say which of three things it is showing: a live
-    # market, the closing book Yahoo keeps serving for some hours after the
-    # close, or the closing prints left once Yahoo blanks that book overnight.
+    # from, and whether the regular session was open when it was read. With the
+    # feed's name and the moment it was read, these are what :attr:`price_basis`
+    # turns into the line under the title.
     live: bool = True
     session: date | None = None
     session_open: bool = True
+    source: str = SOURCE_YAHOO
+    # The clock the snapshot was built against, kept so the age of the open
+    # interest can be judged later without asking the wall clock again -- which
+    # would make the caption disagree with the maturities in a test, or across
+    # midnight in production.
+    asof: datetime | None = None
+
+    @property
+    def open_interest_age(self) -> str:
+        """How the sizes behind the quotes stand relative to the quotes.
+
+        Reported rather than assumed. Whether the feed is serving any open
+        interest at all is a question for the data -- Yahoo zeroes the column
+        outright overnight -- and whether it has caught up is a question for the
+        clock. Only in the window between the clearing run and the next open do
+        the two agree, and that is the only time gamma exposure is built from a
+        single session rather than two.
+        """
+        if float(self.quotes.open_interest.sum()) <= 0:
+            return "no OI reported"
+        if self.session is not None and open_interest_caught_up(self.session, self.asof):
+            return "OI updated"
+        return "OI not yet updated"
 
     @property
     def price_basis(self) -> str:
-        """What the plotted quotes are, in words fit for a caption."""
+        """What the plotted quotes are, in words fit for a caption.
+
+        Six forms, one per feed and state. The feed is named because the two do
+        not behave alike once the market shuts: CBOE keeps its closing book up
+        until the next open, while Yahoo withholds it in the small hours and
+        leaves only each strike's last print. A reader who cannot tell them
+        apart cannot tell a two-sided book from a set of prints either.
+        """
         if self.live and self.session_open:
-            return "live quotes, delayed ~15 min"
+            return f"live quotes from {self.source}, delayed ~15 min"
         if self.live:
             # A two-sided book outside the session is the last close's book.
             # Calling it live would mislabel the page for the whole of a
             # Singapore working day, which is New York's evening and night.
             if self.session is None:
-                return "closing quotes, market shut"
-            return f"closing quotes of the {self.session:%Y-%m-%d} session"
+                return f"closing quotes from {self.source}, market shut"
+            return (f"closing quotes from {self.source} for the "
+                    f"{self.session:%Y-%m-%d} session, {self.open_interest_age}")
         if self.session is None:
-            return "last trades of unknown age"
-        return f"closing prints from {self.session:%Y-%m-%d}"
+            return f"last trades from {self.source}, of unknown age"
+        return (f"closing prints from {self.source} for the "
+                f"{self.session:%Y-%m-%d} session, {self.open_interest_age}")
 
     @property
     def implied_carry(self) -> float:
@@ -168,6 +204,17 @@ QUAD_WITCHING_MONTHS = {3, 6, 9, 12}
 # the quotes Yahoo serves are fifteen minutes behind in any case.
 SESSION_OPEN = (9, 30)
 SESSION_CLOSE = (16, 15)
+# The free feeds run about a quarter-hour behind, which is why the session is
+# treated as closing at 16:15 rather than 16:00. The delay applies at the other
+# end too: until 09:45 the chain a caller receives is still the last close's
+# book, however open the market is.
+QUOTES_LIVE_FROM = (9, 45)
+# When the overnight clearing run reaches the feed. Open interest is tallied by
+# OCC after the close, so the sizes served during a session belong to the
+# *previous* one; this is the hour they catch up. Measured on CBOE's SPY file on
+# 2026-09-03, where the figures were unchanged at 04:56 and updated by 05:06 --
+# one observation, so it is a named constant rather than a magic number.
+OI_REFRESH = (5, 0)
 _EXCHANGE = ZoneInfo(EXCHANGE_TZ)
 
 
@@ -195,6 +242,39 @@ def in_session(now: datetime | None = None) -> bool:
     if clock.weekday() >= 5:
         return False
     return SESSION_OPEN <= (clock.hour, clock.minute) < SESSION_CLOSE
+
+
+def quotes_from_this_session(now: datetime | None = None) -> bool:
+    """Whether the delayed feed has caught up to the current session's quotes.
+
+    :func:`in_session` answers whether the market is open. This answers the
+    narrower question of whether the prices on screen belong to today, and for
+    the first quarter-hour after the open they do not -- they are still the
+    last close's book, served beside an underlying price that has been moving
+    with the pre-market since about 05:00. Anything derived from those quotes
+    belongs at the close they were struck at.
+    """
+    clock = exchange_clock(now)
+    if clock.weekday() >= 5:
+        return False
+    return QUOTES_LIVE_FROM <= (clock.hour, clock.minute) < SESSION_CLOSE
+
+
+def open_interest_caught_up(session: date, now: datetime | None = None) -> bool:
+    """Whether the clearing run for ``session`` has published its open interest.
+
+    The run lands in the small hours of the following calendar day, which is why
+    this is asked against the quotes' session rather than the wall clock alone: a
+    Friday close is only caught up from Saturday morning, and stays caught up
+    across the weekend until Monday's open makes the question moot.
+    """
+    clock = exchange_clock(now)
+    day = clock.date()
+    if day <= session:
+        return False
+    if day > session + timedelta(days=1):
+        return True
+    return (clock.hour, clock.minute) >= OI_REFRESH
 
 
 def last_closed_session(now: datetime | None = None) -> date:
@@ -365,6 +445,7 @@ def build_snapshot(
     spot: float,
     r: float,
     now: datetime | None = None,
+    source: str = SOURCE_YAHOO,
 ) -> ExpirySnapshot:
     """Clean one expiration into an :class:`ExpirySnapshot`."""
     dte, T = year_fraction(expiry, now)
@@ -468,8 +549,9 @@ def build_snapshot(
     if not live and pd.notna(latest):
         warns.append(
             f"No live market on this chain: every bid and ask has been blanked, so these "
-            f"are the closing prints of the {latest:%Y-%m-%d} session. That is the normal "
-            "state outside US trading hours and is the market's last word rather than a "
+            f"are the closing prints of the {latest:%Y-%m-%d} session. That is what the "
+            "yfinance fallback does in the small hours -- CBOE keeps its own book up until "
+            "the next open -- and the prints are the market's last word rather than a "
             "stale quote, but the strikes printed at different moments of that session, "
             "so the smile is less precise than it would be intraday."
         )
@@ -508,4 +590,6 @@ def build_snapshot(
         live=live,
         session=session,
         session_open=open_now,
+        source=source,
+        asof=now,
     )

@@ -242,26 +242,51 @@ a Tuesday expiry does not capture it.
 
 ### Running it after the close
 
-The line under the title always says which of three things you are looking at:
+The line under the title tells you three things at once: what the prices are,
+which feed they came from, and how old the position sizes behind them are. It
+reads like `closing quotes from CBOE for the 2026-09-02 session, OI updated`.
 
-- **`live quotes, delayed ~15 min`** — US markets are open. Bids and offers are
-  real, roughly a quarter-hour behind.
-- **`closing quotes of the <date> session`** — US markets have shut, but Yahoo
-  is still serving the bids and offers as they stood at the close. This is the
-  last book of the day and every bit as precise as a live one; it just will not
-  move until the next open. From Singapore this is what you see for most of the
-  working day, since 4pm in New York is 4am here.
-- **`closing prints from <date>`** — some hours after the close Yahoo blanks
-  every bid and ask, so the only price left for each contract is its last trade
-  of that session. Those are the closing quotes, and the page uses them.
+The first part is one of three:
 
-The third is worth reading and is *not* stale data — it is where the market
+- **`live quotes`** — US markets are open. Bids and offers are real, roughly a
+  quarter-hour behind.
+- **`closing quotes`** — US markets have shut, but the feed is still serving the
+  bids and offers as they stood at the close. This is the last book of the day
+  and every bit as precise as a live one; it just will not move until the next
+  open. From Singapore this is what you see for most of the working day, since
+  4pm in New York is 4am here.
+- **`closing prints`** — every bid and ask has been blanked, so the only price
+  left for each contract is its last trade of that session.
+
+The feed is named because the two do not behave alike once the market shuts.
+CBOE keeps its closing book up right through to the next open, so on CBOE you
+will rarely see the third state. yfinance — which the page falls back to when
+CBOE cannot be reached — blanks its book in the small hours, and prints are then
+all that is left.
+
+The prints are worth reading and are *not* stale data — they are where the market
 finished. Two honest limits, though. Different strikes last traded at different
 moments of the session, so the smile is assembled from prices minutes or hours
 apart rather than one instant, and it is quoted less precisely to reflect that.
 And a strike that has not traded since long before that session is thrown out
 rather than believed, so a thin chain has fewer strikes overnight than it does
 intraday.
+
+The last part of the line is about open interest — how many contracts are
+actually outstanding at each strike, which is what the gamma panels are built
+from. It is always a session behind, because the clearing house counts them up
+overnight, and that is true of every source rather than a quirk of this one.
+Intraday there is nothing to say about it, so the line does not mention it. After
+the close it does: `OI not yet updated` means the sizes still belong to the
+session *before* the one whose prices you are looking at. The new ones reach the
+feed around 5am New York time, and it changes to `OI updated` — from then until
+the open, the quotes and the sizes describe the same moment, the previous close,
+and the spot is held there too. If
+the feed is not serving sizes at all it says `no OI reported`, which is worth
+noticing, because gamma built on nothing comes out at zero rather than failing
+loudly. The updated window is the most internally consistent gamma reading of the
+day, and
+from Singapore it falls in the evening.
 
 Note the timestamp beside it is New York time, not yours, and so is every
 "days to expiry" figure on the page. If you are in Asia or Europe, an afternoon
@@ -490,9 +515,10 @@ Units are dollars of stock dealers would need to trade per 1% move.
 ### The caveat that matters more than the numbers
 
 Open interest doesn't record who bought and who sold — only that contracts exist.
-This panel assumes the standard convention (customers buy calls and sell puts, so
-dealers are long call gamma and short put gamma). On plenty of tickers that's
-backwards, and then every conclusion inverts.
+This panel assumes the standard convention: customers *sell* calls (covered-call
+overwriting) and *buy* puts (protection), which leaves dealers long call gamma and
+short put gamma. On plenty of tickers that's backwards — customers buying calls
+outright, or selling puts for premium — and then every conclusion inverts.
 
 **Treat it as a hypothesis about positioning, not a measurement.**
 

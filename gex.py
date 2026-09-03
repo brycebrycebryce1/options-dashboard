@@ -13,11 +13,13 @@ Per strike, in dollars of dealer delta bought per 1% move in spot:
 
 signed positive for calls and negative for puts. That sign is the standard
 convention (SqueezeMetrics, SpotGamma), and it encodes an *assumption*: that
-customers are net buyers of calls and net sellers of puts, leaving dealers long
-call gamma and short put gamma. Open interest carries no sign, so there is no
-way to verify this from the chain -- on tickers where the flow runs the other
-way (heavy call overwriting, put buying for protection) the sign is simply
-wrong. Treat GEX as a positioning hypothesis, not a measurement.
+customers are net sellers of calls (covered-call and buy-write overwriting)
+and net buyers of puts (portfolio protection), which puts the dealer on the
+long side of the calls and the short side of the puts. Open interest carries no
+sign, so there is no way to verify this from the chain -- on tickers where the
+flow runs the other way, customers buying calls outright to chase upside or
+selling puts for premium, the sign is simply wrong and every conclusion drawn
+from it inverts. Treat GEX as a positioning hypothesis, not a measurement.
 
 The profile is recomputed at each candidate spot with every strike's implied
 vol held fixed (sticky-strike), which is the standard assumption and the one

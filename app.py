@@ -204,6 +204,17 @@ def load_spot(symbol: str) -> float:
     # the strikes are read at one instant rather than a few seconds apart.
     book = _book(symbol)
     if book is not None:
+        # Except that CBOE breaks that guarantee itself before the open. Around
+        # 05:00 ET it posts the overnight open interest and starts moving the
+        # underlying with the pre-market while every option bid and ask stays at
+        # the previous close -- the payload admits it, stamping the underlying's
+        # last trade at 15:59:59 of the session before. Tracing gamma across a
+        # spot those quotes never saw is a mismatch the feed introduced rather
+        # than one the reader asked for, so the close is used until the delay has
+        # caught up with the new session. Cached for MARKET_TTL like everything
+        # else here, so the switch at 09:45 lands within the quarter-hour.
+        if not prep.quotes_from_this_session() and book.prev_close > 0:
+            return book.prev_close
         return book.spot
     return data.fetch_spot(symbol, _session())
 
@@ -347,7 +358,10 @@ def in_parallel(tasks: dict, on_done=None) -> dict:
 
 def snapshot(symbol: str, expiry: str, spot: float, rate: float) -> prep.ExpirySnapshot:
     calls, puts = load_chain(symbol, expiry)
-    return prep.build_snapshot(symbol, expiry, calls, puts, spot, rate)
+    # Which feed answered, so the caption can say. Both calls hit the same warm
+    # cache ``load_chain`` just used, so this costs nothing.
+    source = prep.SOURCE_CBOE if _book(symbol) is not None else prep.SOURCE_YAHOO
+    return prep.build_snapshot(symbol, expiry, calls, puts, spot, rate, source=source)
 
 
 SEEDED_FOR = "_expiries_seeded_for"  # the ticker the pickers currently describe
@@ -517,13 +531,11 @@ pdf_slot = st.sidebar.empty()
 md_slot = st.sidebar.empty()
 
 st.sidebar.caption(
-    "Option chains come from CBOE's free delayed feed; price history, the T-bill and "
-    "the index series come from Yahoo. During US trading hours quotes are delayed ~15 "
-    "minutes. After the close the closing bids and offers keep being served for some "
-    "hours, then are blanked overnight, and the page falls back to each strike's "
-    "closing print. The line "
-    "under the title says which of the three it is showing. Open interest settles "
-    "overnight; SEC filings and earnings dates are cached for six hours."
+    "Option chains come from CBOE's free delayed feed, with yfinance as the backup. "
+    "Price history, the T-bill and the index series come from yfinance. Quotes are "
+    "delayed ~15 minutes; the line under the title names the feed that answered and "
+    "says exactly what its numbers are. SEC filings and earnings dates are cached for "
+    "six hours."
 )
 
 # --------------------------------------------------------------------------
@@ -1127,9 +1139,10 @@ if gx is not None:
     GEX_CAVEAT = (
         "The sign is an assumption, not a measurement. Open interest is unsigned, so "
         "this uses the standard convention that dealers are long call gamma and short put "
-        "gamma. On tickers where customers overwrite calls or buy puts for protection, the "
-        "true sign is the opposite and every conclusion here inverts. Read it as a "
-        "positioning hypothesis."
+        "gamma -- the customer side of that is overwriting calls and buying puts for "
+        "protection. On tickers where the flow runs the other way, customers buying calls "
+        "outright or selling puts for premium, the true sign is the opposite and every "
+        "conclusion here inverts. Read it as a positioning hypothesis."
     )
     st.info(GEX_CAVEAT.replace("The sign is an assumption, not a measurement.",
                                "**The sign is an assumption, not a measurement.**"), icon="ℹ️")
@@ -2065,9 +2078,9 @@ st.divider()
 DISCLAIMER = (
     "Educational tool, not investment advice. Everything here is a descriptive statistic "
     "about prices, quotes and filings — none of it is a forecast. Quotes are delayed ~15 "
-    "minutes while US markets are open and are the last session's closing book, then its "
-    "closing prints, once they shut; open interest settles by a session, and 13F holdings "
-    "lag by up to 45 days."
+    "minutes while US markets are open and are the last session's closing book once they "
+    "shut, or its closing prints if the feed blanks that book; open interest is always a "
+    "session behind, and 13F holdings lag by up to 45 days."
 )
 st.caption(DISCLAIMER)
 REPORT.note(DISCLAIMER)
