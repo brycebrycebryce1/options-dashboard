@@ -18,7 +18,9 @@ session, 13F holdings by up to 45 days.
 
 Once US markets shut the quotes stop moving, but they do not vanish, and what is
 left depends on which feed answered. CBOE keeps serving the closing bids and
-offers right through to the next open. Yahoo withholds them some hours after the
+offers right through to the next open, and briefly past it: for a few minutes
+after 09:30 it blanks them while it stands up the day's book. Yahoo withholds
+them some hours after the
 close -- a bid and ask of exactly zero on every strike of every chain -- leaving
 each contract's last trade, which for the strikes that traded that day *is* the
 closing quote; the page keeps those, using the date on each print to discard the
@@ -53,7 +55,13 @@ of lapsing at each midnight.
 The spot is held at that close until 09:45 rather than 09:30, because the feed's
 fifteen-minute delay means the chain is still the previous session's book for the
 first quarter-hour while CBOE's underlying price has been moving with the
-pre-market since dawn.
+pre-market since dawn. Watched across the open on 2026-09-03, that constant
+landed on the minute: SPY's 2026-09-08 chain was still two-sided at 09:39:21,
+blank at 09:41:26 and 09:43:54, and serving a live book again at 09:45:58. Those
+four blank minutes are the one time of day a CBOE page shows `closing prints`,
+and it is a coherent state rather than a broken one -- prints, open interest and
+spot all from the previous session -- but it looks nothing like the page either
+side of it, so it is worth recognising.
 The session test behind that line, the page timestamps and every days-to-expiry
 figure are all on the exchange's clock rather than the server's or the reader's -- run from Singapore, a local
 clock reading half past four in the afternoon is half past four in the *morning*
@@ -669,8 +677,9 @@ density rather than drawing one from noise.
 
 **Stale-quote detection.** Some hours after the close Yahoo returns no two-sided
 markets at all and every price falls back to the last trade. CBOE keeps its book
-up until the next open, so this now bites only on the fallback path -- and the
-line under the title names which path it is, rather than silently producing a
+up until the next open and blanks it only for the few minutes it takes to stand
+up the new one, so this now bites on the fallback path and in that window -- and
+the line under the title names which path it is, rather than silently producing a
 confident-looking density from day-old prints.
 
 **Colour is load-bearing.** Green is calls and buying, red is puts and selling,

@@ -260,9 +260,15 @@ The first part is one of three:
 
 The feed is named because the two do not behave alike once the market shuts.
 CBOE keeps its closing book up right through to the next open, so on CBOE you
-will rarely see the third state. yfinance — which the page falls back to when
-CBOE cannot be reached — blanks its book in the small hours, and prints are then
-all that is left.
+will rarely see the third state — with one exception. For about four minutes just
+after 09:30 New York time, CBOE takes the closing book down before the live one
+appears, and a page run in that window shows prints. That is 9:41pm to 9:45pm in
+Singapore, and it is a coherent reading rather than a broken one: the prices, the
+sizes and the spot all still come from the previous session. It just looks
+completely different from the page a minute later, once the live book arrives and
+the spot jumps to today's. yfinance — which the page falls back to when CBOE
+cannot be reached — blanks its book in the small hours, and prints are then all
+that is left.
 
 The prints are worth reading and are *not* stale data — they are where the market
 finished. Two honest limits, though. Different strikes last traded at different
@@ -959,11 +965,12 @@ open, high, low and close rather than closes alone.
 1. **Everything is delayed.** Quotes by ~15 minutes, open interest overnight, 13F
    holdings by up to 45 days. Nothing here is real time.
 2. **Outside US market hours there are no live quotes.** You see the closing
-   book, which CBOE keeps serving right through to the next open. On the
+   book, which CBOE keeps serving right through to the next open — apart from a
+   few minutes just after it, while the day's book is being stood up. On the
    yfinance fallback that book gets blanked in the small hours and prices drop
    to each strike's last trade, which can be days old on illiquid strikes. The
-   line under the title says which, and the dashboard warns you in the second
-   case; take the warning seriously.
+   line under the title says which, and the dashboard warns you whenever prints
+   are all it has; take the warning seriously.
 3. **Gamma exposure rests on an unverifiable assumption** about who is on which
    side of the trade.
 4. **The implied distribution's tails are extrapolation** beyond the quoted strike

@@ -550,10 +550,11 @@ def build_snapshot(
         warns.append(
             f"No live market on this chain: every bid and ask has been blanked, so these "
             f"are the closing prints of the {latest:%Y-%m-%d} session. That is what the "
-            "yfinance fallback does in the small hours -- CBOE keeps its own book up until "
-            "the next open -- and the prints are the market's last word rather than a "
-            "stale quote, but the strikes printed at different moments of that session, "
-            "so the smile is less precise than it would be intraday."
+            "yfinance fallback does in the small hours, and what CBOE does for a few "
+            "minutes just after the open while it stands up the day's book. The prints "
+            "are the market's last word rather than a stale quote, but the strikes "
+            "printed at different moments of that session, so the smile is less precise "
+            "than it would be intraday."
         )
     elif not live:
         warns.append(
