@@ -15,3 +15,9 @@ byproduct/
 .venv/
 venv/
 .env
+
+# Streamlit's own secrets file. config.toml is tracked because it is only
+# theming; secrets.toml holds API tokens and must never reach a public repo.
+# Listed before any such file exists, since the point is that the first one
+# created is already ignored rather than committed by default.
+.streamlit/secrets.toml
