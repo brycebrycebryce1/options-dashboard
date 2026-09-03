@@ -958,11 +958,12 @@ open, high, low and close rather than closes alone.
 
 1. **Everything is delayed.** Quotes by ~15 minutes, open interest overnight, 13F
    holdings by up to 45 days. Nothing here is real time.
-2. **Outside US market hours there are no live quotes.** For some hours after
-   the close you see the closing book; overnight, prices fall back to each
-   strike's last trade, which can be days old on illiquid strikes. The line under
-   the title says which, and the dashboard warns you in the second case; take the
-   warning seriously.
+2. **Outside US market hours there are no live quotes.** You see the closing
+   book, which CBOE keeps serving right through to the next open. On the
+   yfinance fallback that book gets blanked in the small hours and prices drop
+   to each strike's last trade, which can be days old on illiquid strikes. The
+   line under the title says which, and the dashboard warns you in the second
+   case; take the warning seriously.
 3. **Gamma exposure rests on an unverifiable assumption** about who is on which
    side of the trade.
 4. **The implied distribution's tails are extrapolation** beyond the quoted strike

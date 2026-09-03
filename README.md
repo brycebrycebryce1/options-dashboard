@@ -9,12 +9,12 @@ walks the same page top to bottom assuming no prior knowledge, and explains how
 to read each panel and how each one is commonly misread. This file is the
 technical companion.
 
-No AI, no paid data, no API keys. CBOE's free delayed feed for option chains,
-Yahoo Finance for price history and rates, SEC EDGAR
+No AI, no paid data, no API keys. CBOE's free delayed feed for option chains
+with Yahoo as the fallback, Yahoo Finance for price history and rates, SEC EDGAR
 for filings, `numpy`/`scipy`/`statsmodels` for the maths, `plotly` for the charts.
 
-Everything is delayed: Yahoo quotes by roughly 15 minutes, option open interest
-by a session, 13F holdings by up to 45 days.
+Everything is delayed: quotes by roughly 15 minutes, option open interest by a
+session, 13F holdings by up to 45 days.
 
 Once US markets shut the quotes stop moving, but they do not vanish, and what is
 left depends on which feed answered. CBOE keeps serving the closing bids and
@@ -54,9 +54,8 @@ The spot is held at that close until 09:45 rather than 09:30, because the feed's
 fifteen-minute delay means the chain is still the previous session's book for the
 first quarter-hour while CBOE's underlying price has been moving with the
 pre-market since dawn.
-Which of the three it is appears under the title, and the session test behind
-it, the page timestamps and every days-to-expiry figure are all on the exchange's
-clock rather than the server's or the reader's -- run from Singapore, a local
+The session test behind that line, the page timestamps and every days-to-expiry
+figure are all on the exchange's clock rather than the server's or the reader's -- run from Singapore, a local
 clock reading half past four in the afternoon is half past four in the *morning*
 in New York, and the local date is already tomorrow for the whole of New York's
 afternoon, which read naively would shorten every maturity by a day. **Refresh data** in the sidebar drops
@@ -668,9 +667,11 @@ mega-caps and took AMD's reported excess kurtosis from +17.7 to +0.8. The cost i
 that very thin chains — a $2 stock with fifty-cent strikes — now decline to draw a
 density rather than drawing one from noise.
 
-**Stale-quote detection.** Outside US hours Yahoo returns no two-sided markets at
-all and every price falls back to the last trade. The dashboard says so rather
-than silently producing a confident-looking density from day-old prints.
+**Stale-quote detection.** Some hours after the close Yahoo returns no two-sided
+markets at all and every price falls back to the last trade. CBOE keeps its book
+up until the next open, so this now bites only on the fallback path -- and the
+line under the title names which path it is, rather than silently producing a
+confident-looking density from day-old prints.
 
 **Colour is load-bearing.** Green is calls and buying, red is puts and selling,
 periwinkle `#A9C7EE` is the lead series where there is no direction to encode and
