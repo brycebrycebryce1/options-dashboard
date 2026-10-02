@@ -786,7 +786,7 @@ that it runs.
 | `mdreport.py` | Writes the same report as markdown, charts as numbers, for a model to read |
 | `.streamlit/config.toml` | Dark base and a periwinkle accent, so red can mean "sell" everywhere |
 | `requirements.txt`, `packages.txt` | Python and apt dependencies for Streamlit Cloud; the Python versions are pinned exactly, and the apt package is Chromium, which renders the PDF's figures |
-| `byproduct/` | Tests, their assert harness, an overnight watcher and local tooling. Nothing the app imports lives there, and `.gitignore` keeps it out of the repository, so the root is exactly what Streamlit Cloud needs |
+| `byproduct/` | Tests, their assert harness and local tooling. Nothing the app imports lives there, and `.gitignore` keeps it out of the repository, so the root is exactly what Streamlit Cloud needs |
 
 Nothing outside `app.py` imports Streamlit, and nothing outside `data.py` and
 `edgar.py` touches the network, so every calculation is testable offline.
